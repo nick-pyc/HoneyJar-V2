@@ -110,8 +110,8 @@ first = True
 while True:
     try:
         cfg     = load()
-        ssh_all = cfg.get("ssh",    [2222])
-        tel_all = cfg.get("telnet", [23])
+        ssh_all = cfg.get("ssh",    [22])
+        tel_all = cfg.get("telnet", [23, 2323])
 
         # Cowrie only binds to high ports -- privileged ports are handled by iptables
         ssh_high = [p for p in ssh_all if p >= 1024] or [2222]

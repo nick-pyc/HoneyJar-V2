@@ -2,27 +2,27 @@
 
 ![HoneyJar v2](dashboard/static/preview.png)
 
-Honeypot lab that runs entirely in Docker. One command and you're collecting — SSH, Telnet, HTTP/HTTPS, FTP, and TFTP all listening at once, everything going into a Postgres database, live dashboard at localhost:5000. No config files to write by hand, no systemd nonsense, no manual database setup. The script handles all of it.
+Honeypot lab that runs in Docker. SSH, Telnet, HTTP/HTTPS, FTP, and TFTP all listening at once — everything gets logged into Postgres and shows up in a live dashboard. One command to start, no config files to touch, no database setup. The script writes everything itself and spins up the containers.
 
-Every honeypot supports multiple ports per protocol. You can run SSH on 22 and 2222 at the same time, FTP on 21 and 2121, TFTP on 69 and 6969 — whatever you want. Change it in one JSON file and it picks up the new ports without rebuilding anything.
-
----
-
-## What gets logged
-
-**SSH / Telnet** — Cowrie handles these. Every login attempt goes in the database with the username and password. If someone actually gets a shell, every command they type gets logged. None of it executes on the real host — Cowrie gives them a fake filesystem and fake responses.
-
-**HTTP / HTTPS** — full request logging: method, path, headers, body, user agent. The honeypot serves fake pages that look like real targets — WordPress login, phpMyAdmin, `.env` endpoints, admin panels. Scanners see something they recognize and start submitting credentials. All of that goes straight to the dashboard.
-
-**FTP** — accepts every login, shows a fake filesystem full of things that look worth stealing (`db_backup_2024.sql.gz`, `credentials.txt`, SSH keys). Every command, download attempt, and file upload is captured. The files exist purely to bait automated downloaders.
-
-**TFTP** — responds to read and write requests with fake router configs and firmware images. A lot of automated scripts scan for TFTP specifically to grab Cisco configs — this gives them something to find while logging everything they do.
+Every protocol supports multiple ports at the same time. SSH on 22 and 2222, FTP on 21 and 2121, TFTP on 69 and 6969 — just edit one JSON file and the honeypots pick it up without rebuilding.
 
 ---
 
-## Running it
+## What it logs
 
-Needs Docker with the compose plugin and Python 3.8+. Run as root if you want iptables blocking to work (more on that below).
+**SSH / Telnet** — powered by Cowrie. Logs every login attempt with the username and password. If an attacker gets a shell, every command gets captured too. Nothing actually runs on the host — Cowrie gives them a fake environment and fake output.
+
+**HTTP / HTTPS** — logs the full request: method, path, headers, body, user agent. Serves fake pages that look like real targets (WordPress login, phpMyAdmin, .env files, admin panels). Scanners hit them and start throwing credentials, all of which end up in the database.
+
+**FTP** — takes any login, shows a fake filesystem full of stuff that looks worth grabbing (db_backup_2024.sql.gz, credentials.txt, SSH keys). Every command, download, and upload gets logged. The files are bait for automated tools that just try to pull everything.
+
+**TFTP** — serves fake router configs and firmware images on read requests, captures whatever gets pushed on write requests. A lot of scanning scripts specifically look for TFTP to grab Cisco configs, so it gives them something to find.
+
+---
+
+## Setup
+
+Needs Docker with the compose plugin and Python 3.8+. Root is required if you want the iptables IP blocking to work.
 
 ```bash
 git clone https://github.com/nick-pyc/HoneyJar-V2
@@ -30,69 +30,70 @@ cd HoneyJar-V2
 python3 HoneyJarV2.py
 ```
 
-Dashboard is at `http://localhost:5000`. The access key and owner key print to the terminal on first run. Before putting this on anything internet-facing, change `ACCESS_KEY` and `OWNER_KEY` at the top of `HoneyJarV2.py`.
+Dashboard runs at `http://localhost:5000`. Access key and owner key both print to the terminal on first start. Change `ACCESS_KEY` and `OWNER_KEY` in `HoneyJarV2.py` before running this on anything public.
 
 ---
 
 ## Ports
 
-| Service   | Default | Protocol |
-|-----------|---------|----------|
-| SSH       | 2222    | TCP      |
-| Telnet    | 23      | TCP      |
-| HTTP      | 8080    | TCP      |
-| HTTPS     | 8443    | TLS      |
-| FTP       | 21      | TCP      |
-| TFTP      | 69      | UDP      |
-| Dashboard | 5000    | TCP      |
+| Service   | Default  | Protocol |
+|-----------|----------|----------|
+| SSH       | 22       | TCP      |
+| Telnet    | 23, 2323 | TCP      |
+| HTTP      | 80, 8080 | TCP      |
+| HTTPS     | 443      | TLS      |
+| FTP       | 21       | TCP      |
+| TFTP      | 69       | UDP      |
+| Dashboard | 5000     | TCP      |
 
-To add more ports for any protocol, edit `cowrie/etc/ports_config.json` directly — the honeypots pick it up without a restart. Or change `DEFAULT_PORTS` in `HoneyJarV2.py` before the first run:
+To add or change ports, edit `cowrie/etc/ports_config.json` — changes take effect without rebuilding. Or set `DEFAULT_PORTS` in `HoneyJarV2.py` before the first run:
 
 ```json
 {
-  "ssh":    [2222, 2223],
+  "ssh":    [22, 2222],
   "telnet": [23, 2323],
-  "http":   [8080, 8888],
-  "https":  [8443],
+  "http":   [80, 8080],
+  "https":  [443],
   "ftp":    [21, 2121],
   "tftp":   [69, 6969]
 }
 ```
 
-HTTP has a hot-reload watcher so new ports show up within about 5 seconds. SSH and Telnet restart the Cowrie container to apply port changes.
+HTTP picks up port changes in about 5 seconds without restarting. SSH and Telnet do a Cowrie container restart to apply them.
 
 ---
 
 ## Dashboard
 
-- **Overview** — attack map, hourly chart, top attacker IPs, top credential combos, recent events feed
-- **Events** — full event log, filterable by protocol / type / IP / date range, exportable as JSON, CSV, or TXT
-- **Credentials** — every username:password pair captured across all protocols. Filter, export as a wordlist, copy individual combos
-- **Sessions** — attackers grouped by IP and protocol. Click any row to see a full timeline of everything they did in that session
-- **Payloads** — commands, uploaded files, HTTP POST bodies. Has a hex viewer for anything binary
-- **Protocol pages** — dedicated view for each protocol with its own stats and event table
-- **Settings** — port editor, blocked IP list, export links (owner key required)
+**Overview** — live attack map, hourly activity graph, top attacker IPs, top credential combos, recent events
 
-Every IP, credential, command, and path has a copy button.
+**Events** — full paginated log with filters for protocol, event type, IP, and date range. Export as JSON, CSV, or TXT.
 
-### Auth
+**Credentials** — every username/password pair from every protocol in one place. Filterable, and exportable as a wordlist if you want to feed it somewhere.
 
-Two keys:
+**Sessions** — attackers grouped by IP and protocol. Click a row to see everything that IP did, in order, with timestamps.
 
-- **Access key** — gets you into the dashboard
-- **Owner key** — unlocks Settings, asked separately even when you're already logged in
+**Payloads** — commands run over SSH/Telnet, FTP/TFTP file transfers, HTTP POST bodies. Has a hex viewer built in.
 
-Both are set in `HoneyJarV2.py` and passed into the container as environment variables. Never stored in the database.
+**Protocol pages** — SSH, Telnet, HTTP, FTP, and TFTP each have their own page with stats and a filtered event table.
+
+**Settings** — change ports, manage blocked IPs, export data. Requires the owner key.
+
+Every IP, credential, and command on every page has a copy button.
+
+### Keys
+
+Two separate keys — an access key to get into the dashboard, and an owner key to get into Settings. The owner key is asked separately even if you're already logged in. Both are in `HoneyJarV2.py` and passed to the container as env vars, never written to the database.
 
 ---
 
 ## IP blocking
 
-The orchestrator puts a bash watcher at `/usr/local/bin/honeyjar2-block-watcher.sh`. It checks `blocked_ips.txt` every few seconds and keeps a `HONEYJAR2` iptables chain in sync. Block an IP from the dashboard and it's dropped at the kernel level within seconds. Requires root — if you're not running as root it just skips silently and everything else still works.
+Block an IP from the dashboard and it gets written to `blocked_ips.txt`. A bash watcher script syncs that file to an iptables chain (`HONEYJAR2`) every few seconds, so blocked IPs get dropped at the kernel level almost instantly. Needs root to work — if you're running without it, the watcher just skips and everything else is fine.
 
 ---
 
-## Project layout
+## Layout
 
 ```
 HoneyJar-V2/
@@ -101,7 +102,7 @@ HoneyJar-V2/
 │   └── etc/
 │       ├── cowrie.cfg
 │       ├── userdb.txt
-│       ├── ports_config.json    ← edit this to change ports at runtime
+│       ├── ports_config.json    ← edit to change ports at runtime
 │       └── blocked_ips.txt      ← written by dashboard, read by block watcher
 ├── dashboard/
 │   ├── app.py
@@ -118,16 +119,14 @@ HoneyJar-V2/
 
 ---
 
-## A few things worth knowing
+## Notes
 
-Don't expose port 5000 to the internet. Put it behind a VPN or a firewall rule. The honeypot ports are supposed to be reachable — that's the whole point — but the dashboard shouldn't be.
+Don't put port 5000 on the internet. The honeypot ports are supposed to be exposed, that's the whole point — but the dashboard should stay behind a VPN or firewall.
 
-The FTP fake filesystem is designed to look like a compromised server that someone forgot to lock down. Files like `credentials.txt` and `id_rsa` are there specifically because automated tools will try to download anything with those names.
+The FTP filesystem is built to look like a server someone left wide open. `credentials.txt`, `id_rsa`, SQL dumps — automated tools will try to pull all of it, which is exactly what you want.
 
-TFTP serves fake Cisco/router configs because that's what a lot of scanning scripts are looking for. Give them something to find.
+Cowrie's fake shell is convincing. Most attackers will run their whole playbook — `uname`, `whoami`, `cat /etc/passwd`, download scripts — and never figure out they're sandboxed.
 
-Cowrie's shell simulation is convincing enough that most attackers won't realize they're sandboxed. They'll run `uname`, `whoami`, `cat /etc/passwd`, get realistic-looking output, and keep going.
+Geo IP uses ip-api.com's free batch endpoint (45 req/min). No API key needed. Under heavy load there'll be a short delay before new IPs appear on the map.
 
-Geo lookup uses ip-api.com's free batch endpoint (45 requests/minute). Under heavy attack you'll see a short delay before new IPs show up on the map. No API key needed.
-
-To reset everything and start fresh: `docker compose down -v` wipes the Postgres volume along with all the containers.
+To wipe everything and start clean: `docker compose down -v` removes the containers and the Postgres volume.

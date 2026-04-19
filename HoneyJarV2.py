@@ -15,12 +15,12 @@ ACCESS_KEY = "HoneyJar_ChangeMe_2024!"
 OWNER_KEY  = "HoneyOwner_ChangeMe_2024!"
 
 DEFAULT_PORTS = {
-    "ssh":    [2222],      # add more ports here e.g. [2222, 2223] — cowrie picks them all up
-    "telnet": [23],        # add more e.g. [23, 2323]
-    "http":   [8080],      # add more e.g. [8080, 8888]
-    "https":  [8443],
-    "ftp":    [21],        # multiple supported e.g. [21, 2121]
-    "tftp":   [69],        # UDP — multiple supported e.g. [69, 6969]
+    "ssh":    [22],           # add more ports here e.g. [22, 2222] — cowrie picks them all up
+    "telnet": [23, 2323],     # add more e.g. [23, 2323, 2332]
+    "http":   [80, 8080],     # add more e.g. [80, 8080, 8888]
+    "https":  [443],
+    "ftp":    [21],           # multiple supported e.g. [21, 2121]
+    "tftp":   [69],           # UDP — multiple supported e.g. [69, 6969]
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -78,7 +78,7 @@ def write_ports_config(cfg):
     (COWRIE / "ports_config.json").write_text(json.dumps(cfg, indent=2))
 
 def write_cowrie_cfg(cfg):
-    ssh_p    = cfg.get("ssh",    [22, 2222])
+    ssh_p    = cfg.get("ssh",    [22])
     telnet_p = cfg.get("telnet", [23, 2323])
     ssh_ep   = " ".join(f"tcp:{p}:interface=0.0.0.0" for p in ssh_p)
     tel_ep   = " ".join(f"tcp:{p}:interface=0.0.0.0" for p in telnet_p)
@@ -245,8 +245,8 @@ def load():
         return {{}}
 
 def write_cfg(cfg):
-    ssh_p    = cfg.get("ssh",    [2222])
-    telnet_p = cfg.get("telnet", [23])
+    ssh_p    = cfg.get("ssh",    [22])
+    telnet_p = cfg.get("telnet", [23, 2323])
     ssh_ep   = " ".join(f"tcp:{{p}}:interface=0.0.0.0" for p in ssh_p)
     tel_ep   = " ".join(f"tcp:{{p}}:interface=0.0.0.0" for p in telnet_p)
     CFG_F.write_text(
@@ -282,8 +282,8 @@ last_ssh, last_tel, first = None, None, True
 while True:
     try:
         cfg = load()
-        ssh = tuple(cfg.get("ssh",    [2222]))
-        tel = tuple(cfg.get("telnet", [23]))
+        ssh = tuple(cfg.get("ssh",    [22]))
+        tel = tuple(cfg.get("telnet", [23, 2323]))
         if ssh != last_ssh or tel != last_tel:
             write_cfg(cfg)
             if not first:
